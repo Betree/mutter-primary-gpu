@@ -1,16 +1,8 @@
-const Gio = imports.gi.Gio;
-const GObject = imports.gi.GObject;
-const GLib = imports.gi.GLib;
-const File = imports.gi.Gio.File;
-const PanelMenu = imports.ui.panelMenu;
-const PopupMenu = imports.ui.popupMenu;
-const ByteArray = imports.byteArray;
-const Notification = imports.ui.messageTray.Notification;
-const Urgency = imports.ui.messageTray.Urgency;
-const SystemNotificationSource =
-  imports.ui.messageTray.SystemNotificationSource;
-const messageTray = imports.ui.main.messageTray;
-const Meta = imports.gi.Meta;
+import GLib from "gi://GLib";
+import * as MessageTray from "resource:///org/gnome/shell/ui/messageTray.js";
+import { messageTray } from "resource:///org/gnome/shell/ui/main.js";
+import Meta from "gi://Meta";
+import Gio from "gi://Gio";
 
 const UDEV_RULE_PATH = "/etc/udev/rules.d/61-mutter-primary-gpu.rules";
 
@@ -35,13 +27,13 @@ function exec(command, envVars = {}) {
   });
 }
 
-function getActiveGpu() {
+export function getActiveGpu() {
   const cmd = getPrintRendererPath();
   return exec(cmd);
 }
 
-async function getRenderer(device) {
-  const file = File.new_for_path(`/dev/dri/${device}`);
+export async function getRenderer(device) {
+  const file = Gio.File.new_for_path(`/dev/dri/${device}`);
   if (!file.query_exists(null)) return null;
   const property = await exec(
     `udevadm info --query=property --property=ID_PATH_TAG /dev/dri/${device}`
@@ -54,23 +46,25 @@ async function getRenderer(device) {
   });
 }
 
-function getPrintRendererPath() {
+export function getPrintRendererPath() {
   const knownPaths = [
     "/usr/libexec/gnome-control-center-print-renderer",
     "/usr/lib/gnome-control-center-print-renderer",
   ];
 
   for (const path of knownPaths) {
-    if (File.new_for_path(path).query_exists(null)) {
-      return path
+    if (Gio.File.new_for_path(path).query_exists(null)) {
+      return path;
     }
   }
 
-  throw new Error("Unable to find `gnome-control-center-print-renderer` in any known location.")
+  throw new Error(
+    "Unable to find `gnome-control-center-print-renderer` in any known location."
+  );
 }
 
-function getGpus() {
-  const path = File.new_for_path("/dev/dri/");
+export function getGpus() {
+  const path = Gio.File.new_for_path("/dev/dri/");
   const enumerator = path.enumerate_children("standard::name", 0, null);
 
   const gpus = new Set();
@@ -84,11 +78,12 @@ function getGpus() {
   return gpus;
 }
 
-function getPrimaryGpu() {
-  const file = File.new_for_path(UDEV_RULE_PATH);
+export function getPrimaryGpu() {
+  const file = Gio.File.new_for_path(UDEV_RULE_PATH);
   if (!file.query_exists(null)) return null;
   const [, contents] = file.load_contents(null);
-  const c = ByteArray.toString(contents).trim();
+  const decoder = new TextDecoder();
+  const c = decoder.decode(contents).trim();
   const regex =
     /^ENV{DEVNAME}=="\/dev\/dri\/(card[\d+])", TAG\+="mutter-device-preferred-primary"$/;
   const r = regex.exec(c);
@@ -96,32 +91,37 @@ function getPrimaryGpu() {
   return r[1];
 }
 
-function notify(message) {
-  const source = new SystemNotificationSource();
+export function notify(message) {
+  const source = new MessageTray.Source();
   messageTray.add(source);
-  const notification = new Notification(source, "Mutter Primary GPU", message, {
-    gicon: new Gio.ThemedIcon({ name: "video-display-symbolic" }),
-  });
+  const notification = new MessageTray.Notification(
+    source,
+    "Mutter Primary GPU",
+    message,
+    {
+      gicon: new Gio.ThemedIcon({ name: "video-display-symbolic" }),
+    }
+  );
   notification.setTransient(true);
   source.showNotification(notification);
 }
 
-function notifyError(err) {
+export function notifyError(err) {
   logError(err);
-  const source = new SystemNotificationSource();
+  const source = new MessageTray.Source();
   messageTray.add(source);
-  const notification = new Notification(
+  const notification = new MessageTray.Notification(
     source,
     "Mutter Primary GPU",
     err.message,
     { gicon: new Gio.ThemedIcon({ name: "video-display-symbolic" }) }
   );
   notification.setTransient(true);
-  notification.setUrgency(Urgency.CRITICAL);
+  notification.setUrgency(MessageTray.Urgency.CRITICAL);
   source.showNotification(notification);
 }
 
-function setPrimaryGpu(primary) {
+export function setPrimaryGpu(primary) {
   const commands = [];
 
   // Only way to remove mutter-device-preferred-primary tag that might have been set previosly
@@ -156,4 +156,3 @@ function setPrimaryGpu(primary) {
     })
     .catch(notifyError);
 }
-
